@@ -10,7 +10,7 @@ RUN apk add cmake
 WORKDIR /app
 
 # Clone and install the chemfiles fork customized to support '.bin' format reading and streaming.
-RUN git clone https://github.com/d-beltran/chemfiles --depth 1 && cd chemfiles && git fetch --unshallow  && mkdir build && cd build && cmake .. && make && make install
+RUN git clone https://github.com/d-beltran/chemfiles --depth 1 && cd chemfiles && git fetch --unshallow  && mkdir build && cd build && cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DCMAKE_CXX_FLAGS="-D__LITTLE_ENDIAN__" .. && make && make install
 
 # Verify installation
 RUN node --version && npm --version && git --version
