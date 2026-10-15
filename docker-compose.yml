@@ -1,15 +1,54 @@
 services:
 
+  caddy:
+    image: caddy:latest
+    restart: unless-stopped
+    ports:
+      - "1558:1558" 
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+      - ./Caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    networks:
+      - mddb_network
+    deploy:
+      resources:
+        limits:
+          cpus: ${CADDY_CPU_LIMIT} # Specify the limit number of CPUs
+          memory: ${CADDY_MEMORY_LIMIT} # Specify the limit memory
+        reservations:
+          cpus: ${CADDY_CPU_RESERVATION} # Specify the reserved number of CPUs
+          memory: ${CADDY_MEMORY_RESERVATION} # Specify the reserved memory
+        
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:latest
+    environment:
+      OAUTH2_PROXY_PROVIDER: keycloak-oidc
+      OAUTH2_PROXY_CLIENT_ID: ${OAUTH2_PROXY_CLIENT_ID}
+      OAUTH2_PROXY_CLIENT_SECRET: ${OAUTH2_PROXY_CLIENT_SECRET}
+      OAUTH2_PROXY_COOKIE_SECRET: ${OAUTH2_PROXY_COOKIE_SECRET} # Generate with: `openssl rand -base64 32`
+      OAUTH2_PROXY_COOKIE_SECURE: "false"
+      OAUTH2_PROXY_COOKIE_SAMESITE: "lax"
+      OAUTH2_PROXY_REDIRECT_URL: ${OAUTH2_PROXY_REDIRECT_URL}
+      OAUTH2_PROXY_ALLOWED_REDIRECT_DOMAINS: "*"
+      OAUTH2_PROXY_UPSTREAMS: ${OAUTH2_PROXY_UPSTREAMS}
+      OAUTH2_PROXY_HTTP_ADDRESS: "0.0.0.0:4180"
+      OAUTH2_PROXY_EMAIL_DOMAINS: "*"
+      OAUTH2_PROXY_OIDC_ISSUER_URL: ${OAUTH2_PROXY_OIDC_ISSUER_URL}
+      OAUTH2_PROXY_SET_XAUTHREQUEST: "true"
+      OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: "true"
+      OAUTH2_PROXY_REVERSE_PROXY: "true"
+    networks:
+      - mddb_network
+
   client:
     image: client_image
     build:
       context: ./client # folder to search Dockerfile for this image
       args:
         CLIENT_INNER_PORT: ${CLIENT_INNER_PORT}
-    ports:
-      - "${CLIENT_OUTER_PORT}:${CLIENT_INNER_PORT}" # port mapping
     networks:
-      - web_network
+      - mddb_network
     deploy:
       replicas: ${CLIENT_REPLICAS} # Specify the number of replicas for Docker Swarm
       resources:
@@ -38,11 +77,8 @@ services:
         REST_INNER_PORT: ${REST_INNER_PORT}
     depends_on:
       - mongodb
-    ports:
-      - "${REST_OUTER_PORT}:${REST_INNER_PORT}" # port mapping
     networks:
-      - data_network
-      - web_network
+      - mddb_network
     deploy:
       replicas: ${REST_REPLICAS} # Specify the number of replicas for Docker Swarm
       resources:
@@ -68,13 +104,11 @@ services:
       LOADER_DB_PASSWORD: ${LOADER_DB_PASSWORD}
       REST_DB_LOGIN: ${REST_DB_LOGIN}
       REST_DB_PASSWORD: ${REST_DB_PASSWORD}
-    ports:
-      - "${DB_OUTER_PORT}:${DB_INNER_PORT}"
     volumes:
       - db_volume:/data/db # path where the database will be stored (outside the container, in the host machine)
       - ./mongodb/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro # path to the template initialization script
     networks:
-      - data_network
+      - mddb_network
     deploy:
       replicas: ${DB_REPLICAS} # Specify the number of replicas for Docker Swarm
       resources:
@@ -104,7 +138,7 @@ services:
       RETENTION_COUNT: ${DB_BACKUP_RETENTION_COUNT}
       BACKUP_INTERVAL: ${DB_BACKUP_INTERVAL}
     networks:
-      - data_network
+      - mddb_network
     depends_on:
       - mongodb
     deploy:
@@ -120,6 +154,8 @@ services:
         condition: on-failure # Restart only on failure
 
 volumes:
+  caddy_data:
+  caddy_config:
   db_volume:
     driver: local
     driver_opts:
@@ -128,7 +164,4 @@ volumes:
       device: ${DB_VOLUME_PATH} # bind the volume to DB_VOLUME_PATH on the host
 
 networks:
-  data_network:
-    external: true # Use an external network
-  web_network:
-    external: true # Use an external network
+  mddb_network:
